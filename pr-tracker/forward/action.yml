@@ -44,6 +44,21 @@ runs:
         commenter=$(jq -r '.comment.user.login // ""' "$payload")
         head_sha=$(jq -r '(.check_suite.head_sha // .workflow_run.head_sha // .sha // "")' "$payload")
 
+        # Don't dispatch events the tracker ignores: each dispatch costs a billed
+        # ingest run on the private tracker. Drafting a PR moves nothing (the daily
+        # sweep still files anything missed), and only the review-cycle labels move
+        # a card — match them case-insensitively, since repos spell them differently.
+        if [ "$action" = "converted_to_draft" ]; then
+          echo "converted_to_draft is not routed by pr-tracker; nothing to forward."
+          exit 0
+        fi
+        if [ "$action" = "labeled" ] || [ "$action" = "unlabeled" ]; then
+          case "$(printf '%s' "$label" | tr '[:upper:]' '[:lower:]')" in
+            "changes requested"|"do not review"|"ready for review") ;;
+            *) echo "label '$label' is not routed by pr-tracker; nothing to forward."; exit 0 ;;
+          esac
+        fi
+
         jq -n \
           --arg event "$event" \
           --arg action "$action" \
