@@ -108,7 +108,8 @@ def test_push_auto_keeps_full_non_opt_in_matrix(tmp_path):
     )
 
     assert "linux_arm64" in matrices.build.linux.archs
-    assert "osx_amd64" in matrices.build.macos.archs
+    assert "osx_amd64" not in matrices.build.macos.archs
+    assert "osx_arm64" in matrices.build.macos.archs
     assert "windows_amd64_mingw" in matrices.build.windows.archs
     assert "wasm_threads" in matrices.build.wasm.archs
     assert "windows_arm64" not in matrices.build.windows.archs
@@ -120,6 +121,62 @@ def test_explicit_reduced_ci_modes(tmp_path):
 
     assert "linux_arm64" not in enabled.build.linux.archs
     assert "linux_arm64" in disabled.build.linux.archs
+    assert "osx_amd64" not in disabled.build.macos.archs
+
+
+def test_osx_amd64_opt_in_overrides_reduced_ci_for_every_group(tmp_path):
+    matrices = compute_core_matrices(
+        load_repo_config(),
+        opt_in_archs="osx_amd64",
+        reduced_ci_mode="enabled",
+        event_type="pull_request",
+    )
+
+    assert matrices.build.macos.archs == [
+        "osx_amd64",
+        "osx_amd64",
+        "osx_amd64",
+    ]
+    assert [job.group_name for job in matrices.build.macos.includes] == [
+        "external",
+        "main",
+        "rust",
+    ]
+    assert matrices.test.macos.archs == ["osx_amd64"]
+
+
+def test_osx_amd64_exclusion_overrides_opt_in(tmp_path):
+    matrices = compute_core_matrices(
+        load_repo_config(),
+        exclude_archs="osx_amd64",
+        opt_in_archs="osx_amd64",
+        reduced_ci_mode="disabled",
+    )
+
+    assert "osx_amd64" not in matrices.build.macos.archs
+    assert "osx_amd64" not in matrices.test.macos.archs
+
+
+def test_group_opt_ins_are_additive_with_run_opt_ins(tmp_path):
+    matrices = compute_matrices(
+        load_repo_config(),
+        groups="""custom:
+  config: custom.cmake
+  opt_in_archs: windows_arm64
+  toolchain: main
+other:
+  config: other.cmake
+  toolchain: main
+""",
+        opt_in_archs="osx_amd64",
+        reduced_ci_mode="enabled",
+    )
+
+    matrices.build.macos.get(arch="osx_amd64", prefix="custom-extensions")
+    matrices.build.macos.get(arch="osx_amd64", prefix="other-extensions")
+    matrices.build.windows.get(arch="windows_arm64", prefix="custom-extensions")
+    with pytest.raises(MatrixError, match="found 0"):
+        matrices.build.windows.get(arch="windows_arm64", prefix="other-extensions")
 
 
 def test_exclude_and_opt_in_filters(tmp_path):
@@ -333,6 +390,7 @@ def test_cuda_toolchain_rejects_unsupported_architectures():
   config: .github/config/cuda_extensions.cmake
   toolchain: cuda13
 """,
+            opt_in_archs="osx_amd64",
             reduced_ci_mode="disabled",
         )
 
@@ -388,6 +446,7 @@ def test_group_expansion_exposes_extra_toolchains_only_on_builds():
   extra_toolchains: unixodbc;parser_tools
   toolchain: main
 """,
+        opt_in_archs="osx_amd64",
         reduced_ci_mode="disabled",
     )
 

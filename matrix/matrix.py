@@ -484,9 +484,9 @@ def include_entry(entry: dict[str, Any], excluded: set[str], opt_in: set[str], r
     duckdb_arch = entry["duckdb_arch"]
     if duckdb_arch in excluded:
         return False
+    if entry["opt_in"]:
+        return duckdb_arch in opt_in
     if reduced_ci and not entry["run_in_reduced_ci_mode"]:
-        return False
-    if entry["opt_in"] and duckdb_arch not in opt_in:
         return False
     return True
 
@@ -610,12 +610,7 @@ def compute_matrices(
         ] = {}
         for group in extension_groups:
             effective_exclude_archs = combine_lists(group.default_exclude_archs, exclude_archs)
-            if group.opt_in_archs is not None:
-                effective_opt_in_archs = group.opt_in_archs
-            elif group.key == "main":
-                effective_opt_in_archs = opt_in_archs
-            else:
-                effective_opt_in_archs = ""
+            effective_opt_in_archs = combine_lists(opt_in_archs, group.opt_in_archs)
             excluded = set(split_list(effective_exclude_archs))
             opt_in = set(split_list(effective_opt_in_archs))
             for entry in entries:
