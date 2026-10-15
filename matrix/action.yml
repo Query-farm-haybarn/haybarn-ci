@@ -7,7 +7,7 @@ inputs:
     required: false
     default: ""
   opt_in_archs:
-    description: "Semicolon-separated opt-in duckdb_arch values"
+    description: "Semicolon-separated opt-in duckdb_arch values applied to every group; opt-ins override reduced CI, while exclusions take precedence"
     required: false
     default: ""
   runners:
