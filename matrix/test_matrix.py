@@ -547,6 +547,34 @@ def test_artifact_names_match_one_deduplicated_test_row_per_arch():
     ]
 
 
+def test_prebuilt_duckdb_artifacts_are_part_of_native_build_rows():
+    matrices = compute_core_matrices(
+        load_repo_config(),
+        reduced_ci_mode="disabled",
+    )
+
+    expected = {
+        "linux_amd64": "duckdb-static-libs-linux-amd64.tar.gz",
+        "linux_arm64": "duckdb-static-libs-linux-arm64.tar.gz",
+        "linux_amd64_musl": "duckdb-static-libs-linux-amd64-musl.tar.gz",
+        "linux_arm64_musl": "duckdb-static-libs-linux-arm64-musl.tar.gz",
+        "osx_amd64": "duckdb-static-libs-osx-amd64.tar.gz",
+        "osx_arm64": "duckdb-static-libs-osx-arm64.tar.gz",
+        "windows_amd64": "duckdb-static-libs-windows-amd64.tar.gz",
+        "windows_arm64": "duckdb-static-libs-windows-arm64.tar.gz",
+        "windows_amd64_mingw": "duckdb-static-libs-windows-mingw.tar.gz",
+    }
+    for platform in ("linux", "macos", "windows"):
+        for job in matrices.build.for_platform(platform).includes:
+            assert job.prebuilt_duckdb_artifact == expected[job.duckdb_arch]
+            assert (
+                job.to_dict()["prebuilt_duckdb_artifact"]
+                == expected[job.duckdb_arch]
+            )
+    for job in matrices.build.wasm.includes:
+        assert job.prebuilt_duckdb_artifact == ""
+
+
 def test_arch_without_build_groups_has_no_test_row():
     matrices = compute_matrices(
         load_repo_config(),

@@ -50,6 +50,7 @@ class BuildJob:
     container_name: str | None = None
     container: str | None = None
     extra_toolchains: str = ""
+    prebuilt_duckdb_artifact: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         result: dict[str, Any] = {
@@ -64,6 +65,7 @@ class BuildJob:
             "opt_in_archs": self.opt_in_archs,
             "toolchain": self.toolchain,
             "extra_toolchains": self.extra_toolchains,
+            "prebuilt_duckdb_artifact": self.prebuilt_duckdb_artifact,
             "extension_config_paths": list(self.extension_config_paths),
         }
         if self.osx_build_arch is not None:
@@ -296,7 +298,7 @@ def validate_entry(platform: str, entry: Any) -> None:
         "run_in_reduced_ci_mode",
         "opt_in",
     }
-    allowed = required | {"osx_build_arch"}
+    allowed = required | {"osx_build_arch", "prebuilt_duckdb_artifact"}
     entry_fields = {str(key) for key in entry}
     unknown = entry_fields - allowed
     if unknown:
@@ -541,6 +543,7 @@ def build_job(
         opt_in_archs=effective_opt_in_archs,
         toolchain=group.toolchain,
         extra_toolchains=group.extra_toolchains,
+        prebuilt_duckdb_artifact=str(entry.get("prebuilt_duckdb_artifact", "")),
         extension_config_paths=group.config_paths,
         osx_build_arch=osx_build_arch,
         container_name=container_name,
@@ -699,6 +702,7 @@ def _append_build_matrix_log(
         ("group_name", lambda job: job.group_name),
         ("artifact_prefix", lambda job: job.prefix),
         ("artifact_name", lambda job: job.artifact_name),
+        ("prebuilt_duckdb_artifact", lambda job: job.prebuilt_duckdb_artifact),
         ("vcpkg_target_triplet", lambda job: job.vcpkg_target_triplet),
         ("vcpkg_host_triplet", lambda job: job.vcpkg_host_triplet),
         ("toolchain", lambda job: job.toolchain),
