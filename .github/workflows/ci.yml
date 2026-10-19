@@ -123,9 +123,9 @@ jobs:
           docker push "${main_image}"
           echo "${main_image}" >> "${pushed_images_file}"
 
-          # Build and push remaining variants that depend on already-published base images.
-          IMAGE_SUFFIX="${IMAGE_SUFFIX}" TOOLCHAINS="${{ matrix.dependent_toolchains }}" "./docker/${{ matrix.distro }}/build.sh" "${{ matrix.arch }}"
+          # Build and push dependent variants in order so later variants can pull earlier bases.
           for toolchain in ${{ matrix.dependent_toolchains }}; do
+            IMAGE_SUFFIX="${IMAGE_SUFFIX}" TOOLCHAINS="${toolchain}" "./docker/${{ matrix.distro }}/build.sh" "${{ matrix.arch }}"
             image="${REPO_PREFIX}/${{ matrix.distro }}_${{ matrix.arch }}_${toolchain}${IMAGE_SUFFIX}:${IMAGE_VERSION}"
             docker push "${image}"
             echo "${image}" >> "${pushed_images_file}"

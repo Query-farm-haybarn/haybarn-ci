@@ -51,6 +51,7 @@ build_toolchain() {
 	local repo="${REPO_PREFIX}/${BASE_IMAGE}_${ARCH}_${toolchain}${IMAGE_SUFFIX}"
 	local cpp_repo="${REPO_PREFIX}/${BASE_IMAGE}_${ARCH}_cpp${IMAGE_SUFFIX}"
 	local main_repo="${REPO_PREFIX}/${BASE_IMAGE}_${ARCH}_main${IMAGE_SUFFIX}"
+	local rust_repo="${REPO_PREFIX}/${BASE_IMAGE}_${ARCH}_rust${IMAGE_SUFFIX}"
 
 	case "${toolchain}" in
 		cpp)
@@ -84,7 +85,7 @@ build_toolchain() {
 				"${repo}" \
 				"${root}/cuda/Dockerfile" \
 				"." \
-				--build-arg "CPP_IMAGE=${cpp_repo}:${IMAGE_VERSION}" \
+				--build-arg "RUST_IMAGE=${rust_repo}:${IMAGE_VERSION}" \
 				--build-arg "CUDA_VERSION=${toolchain#"cuda"}"
 			;;
 		*)

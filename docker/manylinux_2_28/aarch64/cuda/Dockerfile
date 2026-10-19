@@ -1,5 +1,5 @@
-ARG CPP_IMAGE=duckdb-ci/manylinux_2_28_aarch64_cpp:v1
-FROM ${CPP_IMAGE}
+ARG RUST_IMAGE=duckdb-ci/manylinux_2_28_aarch64_rust:v1
+FROM ${RUST_IMAGE}
 
 ARG CUDA_VERSION=13
 
