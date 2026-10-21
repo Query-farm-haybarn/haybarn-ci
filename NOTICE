@@ -1,0 +1,18 @@
+Haybarn CI
+
+This repository is a fork of duckdb/duckdb-ci (https://github.com/duckdb/duckdb-ci),
+maintained by Query Farm LLC for Haybarn, an independent derived distribution of
+DuckDB. Haybarn is not affiliated with or endorsed by the DuckDB Foundation.
+DuckDB is a trademark of the DuckDB Foundation.
+
+Upstream duckdb/duckdb-ci ships no LICENSE file. Like the DuckDB Foundation's
+other repositories it is treated here as MIT-licensed; the accompanying LICENSE
+reproduces the DuckDB MIT license and its copyright notice.
+
+Haybarn modifications are kept as a small commit stack on top of upstream
+`main` (branch `haybarn`). They:
+
+- make the container registry of the extension build/test matrix configurable
+  (`matrix` action input `image_registry`), defaulting to Haybarn's registry so
+  Haybarn builds never run in DuckDB's images;
+- add a workflow that publishes the build images under that registry.
