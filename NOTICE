@@ -16,3 +16,9 @@ Haybarn modifications are kept as a small commit stack on top of upstream
   (`matrix` action input `image_registry`), defaulting to Haybarn's registry so
   Haybarn builds never run in DuckDB's images;
 - add a workflow that publishes the build images under that registry.
+
+Upstream's own workflows (ci.yml, pages.yml, prune-dev-images.yml) target
+DuckDB's infrastructure and are disabled in this repository's Actions settings
+rather than edited, so rebases stay clean. A workflow file that a rebase adds
+starts out enabled: after each rebase, review `gh workflow list` and disable
+any new upstream workflow.
