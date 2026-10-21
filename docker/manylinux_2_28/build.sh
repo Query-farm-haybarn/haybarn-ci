@@ -95,6 +95,14 @@ build_toolchain() {
 				--build-arg "RUST_IMAGE=${rust_repo}:${IMAGE_VERSION}" \
 				--build-arg "CUDA_VERSION=${cuda_version}"
 			;;
+		full)
+			# Haybarn: rust + go + fortran + multimedia, for per-extension builds.
+			build_image \
+				"${repo}" \
+				"${root}/full/Dockerfile" \
+				"." \
+				--build-arg "RUST_IMAGE=${rust_repo}:${IMAGE_VERSION}"
+			;;
 		*)
 			echo "Unknown toolchain: ${toolchain}" >&2
 			exit 1

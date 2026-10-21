@@ -50,6 +50,7 @@ build_toolchain() {
 	local repo="${REPO_PREFIX}/${BASE_IMAGE}_${ARCH}_${toolchain}${IMAGE_SUFFIX}"
 	local cpp_repo="${REPO_PREFIX}/${BASE_IMAGE}_${ARCH}_cpp${IMAGE_SUFFIX}"
 	local main_repo="${REPO_PREFIX}/${BASE_IMAGE}_${ARCH}_main${IMAGE_SUFFIX}"
+	local rust_repo="${REPO_PREFIX}/${BASE_IMAGE}_${ARCH}_rust${IMAGE_SUFFIX}"
 
 	case "${toolchain}" in
 		cpp)
@@ -76,6 +77,14 @@ build_toolchain() {
 				--build-arg "CPP_IMAGE=${cpp_repo}:${IMAGE_VERSION}" \
 				--build-arg "RCLONE_INSTALL_VERSION=${RCLONE_INSTALL_VERSION}" \
 				--build-arg "S5CMD_VERSION=${S5CMD_VERSION}"
+			;;
+		full)
+			# Haybarn: rust + go + fortran + multimedia, for per-extension builds.
+			build_image \
+				"${repo}" \
+				"${root}/full/Dockerfile" \
+				"." \
+				--build-arg "RUST_IMAGE=${rust_repo}:${IMAGE_VERSION}"
 			;;
 		*)
 			echo "Unknown toolchain: ${toolchain}" >&2
