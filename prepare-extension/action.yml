@@ -44,6 +44,10 @@ runs:
         SKIP_DUCKDB: ${{ inputs.duckdb-repository != '' && 'true' || 'false' }}
       run: |
         set -euo pipefail
+        # Container jobs run git as a different user than the workspace owner.
+        git config --global --add safe.directory "$PWD"
+        git config --global --add safe.directory "$PWD/duckdb"
+        git config --global --add safe.directory "$PWD/extension-ci-tools"
         [ -f .gitmodules ] || { echo "no .gitmodules — nothing to init"; exit 0; }
         # Vendored libraries an extension add_subdirectory()s are needed, nested
         # submodules included, but only at their pinned commit: shallow. The
