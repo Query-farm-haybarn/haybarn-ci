@@ -370,6 +370,17 @@ def test_linux_container_fields_use_configured_image_registry():
         "ghcr.io/query-farm-haybarn/haybarn-ci/manylinux_2_28_aarch64_main:20261021-abcdef12"
     )
 
+
+def test_wasm_native_eh_builds_use_haybarn_triplets():
+    matrices = compute_core_matrices(load_repo_config(), reduced_ci_mode="disabled")
+
+    def triplet(arch):
+        return next(job for job in matrices.build.wasm.includes if job.duckdb_arch == arch).vcpkg_target_triplet
+
+    assert triplet("wasm_eh") == "wasm32-emscripten-eh"
+    assert triplet("wasm_threads") == "wasm32-emscripten-threads"
+    assert triplet("wasm_mvp") == "wasm32-emscripten"
+
 def test_cuda_builds_select_cuda_test_container_and_aggregate_toolchains():
     matrices = compute_matrices(
         load_repo_config(),
