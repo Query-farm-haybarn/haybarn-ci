@@ -1,0 +1,163 @@
+name: Haybarn Images
+
+# Publishes the Linux build/test images that the matrix action selects
+# (ghcr.io/query-farm-haybarn/haybarn-ci/<distro>_<arch>_<toolchain>:<version>),
+# built from upstream's docker/ definitions on GitHub-hosted runners. Upstream's
+# ci.yml stays untouched; it targets DuckDB's Namespace runners.
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_version:
+        description: Image tag (default <yyyymmdd>-<sha8>, matching upstream's scheme)
+        required: false
+        type: string
+        default: ""
+      alias_tag:
+        description: Optional extra tag for every image, e.g. v2.0.0
+        required: false
+        type: string
+        default: ""
+      include_cuda:
+        description: Also build the manylinux cuda12/cuda13 images
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: haybarn-images
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    outputs:
+      image_version: ${{ steps.config.outputs.image_version }}
+      repo_prefix: ${{ steps.config.outputs.repo_prefix }}
+    steps:
+      - id: config
+        env:
+          INPUT_IMAGE_VERSION: ${{ inputs.image_version }}
+        run: |
+          set -euo pipefail
+          image_version="${INPUT_IMAGE_VERSION:-$(date -u +%Y%m%d)-${GITHUB_SHA::8}}"
+          # GHCR references must be lowercase; the org name is not.
+          repo_prefix="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "image_version=${image_version}" >> "$GITHUB_OUTPUT"
+          echo "repo_prefix=${repo_prefix}" >> "$GITHUB_OUTPUT"
+
+  build-images:
+    name: Build images (${{ matrix.distro }}, ${{ matrix.arch }})
+    runs-on: ${{ matrix.runs_on }}
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: manylinux_2_28
+            arch: amd64
+            runs_on: ubuntu-24.04
+            dependent_toolchains: rust
+          - distro: manylinux_2_28
+            arch: aarch64
+            runs_on: ubuntu-24.04-arm
+            dependent_toolchains: rust
+          - distro: alpine_3_22
+            arch: amd64
+            runs_on: ubuntu-24.04
+            dependent_toolchains: rust
+          - distro: alpine_3_22
+            arch: aarch64
+            runs_on: ubuntu-24.04-arm
+            dependent_toolchains: rust
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          docker system prune -af >/dev/null
+          df -h /
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image variants
+        env:
+          IMAGE_VERSION: ${{ needs.prepare.outputs.image_version }}
+          REPO_PREFIX: ${{ needs.prepare.outputs.repo_prefix }}
+          ALIAS_TAG: ${{ inputs.alias_tag }}
+          DISTRO: ${{ matrix.distro }}
+          ARCH: ${{ matrix.arch }}
+          DEPENDENT_TOOLCHAINS: ${{ matrix.dependent_toolchains }}${{ inputs.include_cuda && matrix.distro == 'manylinux_2_28' && ' cuda12 cuda13' || '' }}
+        run: |
+          set -eux -o pipefail
+          pushed_images_file="${RUNNER_TEMP}/pushed-images-${DISTRO}-${ARCH}.txt"
+          : > "${pushed_images_file}"
+
+          # GHCR occasionally answers "unknown blob" while concurrent pushes
+          # race on shared layers; a retry with backoff gets past it.
+          push() {
+            local image="$1"
+            for i in 1 2 3; do
+              if docker push "${image}"; then
+                echo "${image}" >> "${pushed_images_file}"
+                return 0
+              fi
+              echo "push attempt $i failed; sleeping before retry"
+              sleep $((i * 15))
+            done
+            return 1
+          }
+
+          build_and_push() {
+            local toolchain="$1"
+            local repo="${REPO_PREFIX}/${DISTRO}_${ARCH}_${toolchain}"
+            TOOLCHAINS="${toolchain}" "./docker/${DISTRO}/build.sh" "${ARCH}"
+            push "${repo}:${IMAGE_VERSION}"
+            if [[ -n "${ALIAS_TAG}" ]]; then
+              docker tag "${repo}:${IMAGE_VERSION}" "${repo}:${ALIAS_TAG}"
+              push "${repo}:${ALIAS_TAG}"
+            fi
+          }
+
+          # Same order as upstream: later variants build FROM earlier ones.
+          for toolchain in cpp test main ${DEPENDENT_TOOLCHAINS}; do
+            build_and_push "${toolchain}"
+          done
+
+      - name: Make packages public
+        # GHCR packages default to private even under a public org, and
+        # cross-repo pulls then fail. These images hold no secrets.
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DISTRO: ${{ matrix.distro }}
+          ARCH: ${{ matrix.arch }}
+          DEPENDENT_TOOLCHAINS: ${{ matrix.dependent_toolchains }}${{ inputs.include_cuda && matrix.distro == 'manylinux_2_28' && ' cuda12 cuda13' || '' }}
+        run: |
+          repo_name="${GITHUB_REPOSITORY#*/}"
+          for toolchain in cpp test main ${DEPENDENT_TOOLCHAINS}; do
+            pkg="${repo_name}%2F${DISTRO}_${ARCH}_${toolchain}"
+            gh api -X PATCH "/orgs/${GITHUB_REPOSITORY_OWNER}/packages/container/${pkg}" -f visibility=public \
+              && echo "marked ${pkg} public" \
+              || echo "WARN: failed to make ${pkg} public (flip it manually under Settings -> Packages)"
+          done
+
+      - name: Upload pushed image list
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: pushed-images-${{ matrix.distro }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/pushed-images-${{ matrix.distro }}-${{ matrix.arch }}.txt
+          if-no-files-found: warn
