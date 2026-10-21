@@ -1,6 +1,13 @@
 name: "Prepare extension"
 description: "Checkout extension directories"
 
+# Haybarn: checkouts are blobless (full commit/tag history for `git describe`,
+# file contents fetched only for the checked-out tree), and the extension's own
+# `duckdb` / `extension-ci-tools` submodules are not cloned when a custom DuckDB
+# repository replaces them — callers check out the Haybarn engine here and
+# extension-ci-tools in their next step. The recursive full-depth checkout this
+# replaces spent ~1-2 minutes per job cloning upstream DuckDB only to overwrite it.
+
 inputs:
   duckdb-ref:
     description: "Ref to fetch for duckdb"
@@ -28,7 +35,45 @@ runs:
         repository: ${{ inputs.extension-repository }}
         ref: ${{ inputs.extension-ref }}
         fetch-depth: 0
-        submodules: recursive
+        filter: blob:none
+        submodules: false
+
+    - name: Init extension submodules
+      shell: bash
+      env:
+        SKIP_DUCKDB: ${{ inputs.duckdb-repository != '' && 'true' || 'false' }}
+      run: |
+        set -euo pipefail
+        [ -f .gitmodules ] || { echo "no .gitmodules — nothing to init"; exit 0; }
+        # Vendored libraries an extension add_subdirectory()s are needed, nested
+        # submodules included, but only at their pinned commit: shallow. The
+        # top-level engine is skipped when a custom DuckDB replaces it below.
+        # No `mapfile`: macOS runners ship bash 3.2.
+        skip='extension-ci-tools'
+        [ "$SKIP_DUCKDB" = true ] && skip='duckdb|extension-ci-tools'
+        paths=()
+        while IFS= read -r p; do
+          [ -n "$p" ] && paths+=("$p")
+        done < <(
+          git config --file .gitmodules --get-regexp '^submodule\..*\.path$' \
+            | awk '{print $2}' \
+            | grep -vxE "($skip)" || true
+        )
+        if [ "${#paths[@]}" -gt 0 ]; then
+          printf 'init submodule (shallow): %s\n' "${paths[@]}"
+          git submodule update --init --recursive --depth 1 -- "${paths[@]}"
+        fi
+        # extension-ci-tools and the upstream engine keep history: they are
+        # checked out at refs other than the recorded submodule commit below.
+        keep=()
+        for p in duckdb extension-ci-tools; do
+          [ "$p" = duckdb ] && [ "$SKIP_DUCKDB" = true ] && continue
+          git config --file .gitmodules --get-regexp '^submodule\..*\.path$' | awk '{print $2}' | grep -qx "$p" && keep+=("$p")
+        done
+        if [ "${#keep[@]}" -gt 0 ]; then
+          printf 'init submodule (blobless): %s\n' "${keep[@]}"
+          git submodule update --init --filter=blob:none -- "${keep[@]}"
+        fi
 
     - name: Checkout custom DuckDB
       if: ${{ inputs.duckdb-repository != '' }}
@@ -36,19 +81,22 @@ runs:
       with:
         path: duckdb
         repository: ${{ inputs.duckdb-repository }}
-        ref: ${{ inputs.duckdb-ref }}
+        ref: ${{ inputs.duckdb-sha != '' && inputs.duckdb-sha || inputs.duckdb-ref }}
         fetch-depth: 0
+        filter: blob:none
 
     - name: Set git ref
       shell: bash
       run: |
         set -eux -o pipefail
         git -C duckdb fetch --prune --tags origin "${{ inputs.duckdb-ref }}"
-        git -C extension-ci-tools fetch --prune --tags origin
         if [[ "${{ inputs.duckdb-sha }}" != '' ]]; then
           git -C duckdb checkout "${{ inputs.duckdb-sha }}"
         fi
-        git -C extension-ci-tools checkout "${{ inputs.ci-tools-ref }}"
+        if [ -d extension-ci-tools/.git ] || [ -f extension-ci-tools/.git ]; then
+          git -C extension-ci-tools fetch --prune --tags origin
+          git -C extension-ci-tools checkout "${{ inputs.ci-tools-ref }}"
+        fi
 
         git config --global --add safe.directory "$PWD"
         git config --global --add safe.directory "$PWD/duckdb"
