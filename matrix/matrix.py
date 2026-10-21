@@ -504,6 +504,9 @@ def include_entry(entry: dict[str, Any], excluded: set[str], opt_in: set[str], r
     return True
 
 
+DEFAULT_IMAGE_REGISTRY = "ghcr.io/duckdb/duckdb-ci"
+
+
 def linux_container_name(duckdb_arch: str, toolchain: str) -> str:
     if duckdb_arch.startswith("linux_amd64"):
         host_arch = "amd64"
@@ -524,6 +527,7 @@ def build_job(
     effective_opt_in_archs: str,
     image_version: str,
     windows_vcpkg_toolchain: str,
+    image_registry: str = DEFAULT_IMAGE_REGISTRY,
 ) -> BuildJob:
     duckdb_arch = str(entry["duckdb_arch"])
     if group.toolchain in CUDA_TOOLCHAIN_VERSIONS and (
@@ -537,7 +541,7 @@ def build_job(
     if duckdb_arch.startswith("linux_"):
         container_name = linux_container_name(duckdb_arch, group.toolchain)
         if image_version:
-            container = f"ghcr.io/duckdb/duckdb-ci/{container_name}:{image_version}"
+            container = f"{image_registry.rstrip('/')}/{container_name}:{image_version}"
     return BuildJob(
         runner=runner,
         vcpkg_target_triplet=select_vcpkg_triplet(
@@ -571,6 +575,7 @@ def test_job(
     extension_config_paths: tuple[str, ...],
     image_version: str,
     windows_vcpkg_toolchain: str,
+    image_registry: str = DEFAULT_IMAGE_REGISTRY,
 ) -> TestJob:
     duckdb_arch = str(entry["duckdb_arch"])
     osx_build_arch = str(entry["osx_build_arch"]) if "osx_build_arch" in entry else None
@@ -579,7 +584,7 @@ def test_job(
     if duckdb_arch.startswith("linux_"):
         container_name = linux_container_name(duckdb_arch, "main")
         if image_version:
-            container = f"ghcr.io/duckdb/duckdb-ci/{container_name}:{image_version}"
+            container = f"{image_registry.rstrip('/')}/{container_name}:{image_version}"
     return TestJob(
         runner=runner,
         duckdb_arch=duckdb_arch,
@@ -609,6 +614,7 @@ def compute_matrices(
     image_version: str = "",
     groups: str | None = None,
     windows_vcpkg_toolchain: str = "cl",
+    image_registry: str = DEFAULT_IMAGE_REGISTRY,
 ) -> Matrices:
     reduced_ci = resolve_reduced_ci_mode(reduced_ci_mode, event_type)
     runner_overrides = parse_runners(runners)
@@ -642,6 +648,7 @@ def compute_matrices(
                         effective_opt_in_archs,
                         image_version,
                         windows_toolchain,
+                        image_registry,
                     )
                 )
                 duckdb_arch = str(entry["duckdb_arch"])
@@ -666,6 +673,7 @@ def compute_matrices(
                 tuple(config_paths),
                 image_version,
                 windows_toolchain,
+                image_registry,
             )
             for entry, runner, toolchains, config_paths, _ in test_entries.values()
         )

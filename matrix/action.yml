@@ -22,6 +22,10 @@ inputs:
     description: "Container image version tag"
     required: false
     default: ""
+  image_registry:
+    description: "Container registry prefix for Linux build and test images (Haybarn: never DuckDB's)"
+    required: false
+    default: "ghcr.io/query-farm-haybarn/haybarn-ci"
   windows_vcpkg_toolchain:
     description: "Windows compiler and matching vcpkg toolchain: cl or clang-cl"
     required: false
@@ -68,6 +72,7 @@ runs:
         RUNNERS: ${{ inputs.runners }}
         REDUCED_CI_MODE: ${{ inputs.reduced_ci_mode }}
         IMAGE_VERSION: ${{ inputs.image_version }}
+        IMAGE_REGISTRY: ${{ inputs.image_registry }}
         WINDOWS_VCPKG_TOOLCHAIN: ${{ inputs.windows_vcpkg_toolchain }}
         GROUPS: ${{ inputs.groups }}
       run: |
@@ -80,6 +85,7 @@ runs:
           --runners "${RUNNERS}" \
           --reduced-ci-mode "${REDUCED_CI_MODE}" \
           --image-version "${IMAGE_VERSION}" \
+          --image-registry "${IMAGE_REGISTRY}" \
           --windows-vcpkg-toolchain "${WINDOWS_VCPKG_TOOLCHAIN}" \
           --groups "${GROUPS}" \
           --out "$GITHUB_OUTPUT"

@@ -352,6 +352,24 @@ def test_linux_container_fields_use_fixed_image_owner_without_suffix(tmp_path):
     )
 
 
+
+def test_linux_container_fields_use_configured_image_registry():
+    matrices = compute_core_matrices(
+        load_repo_config(),
+        image_version="20261021-abcdef12",
+        image_registry="ghcr.io/query-farm-haybarn/haybarn-ci/",
+        reduced_ci_mode="disabled",
+    )
+
+    main_job = matrices.build.linux.get(arch="linux_amd64", prefix="main-extensions")
+    assert main_job.container == (
+        "ghcr.io/query-farm-haybarn/haybarn-ci/manylinux_2_28_amd64_main:20261021-abcdef12"
+    )
+    linux_test = matrices.test.linux.get(arch="linux_arm64")
+    assert linux_test.container == (
+        "ghcr.io/query-farm-haybarn/haybarn-ci/manylinux_2_28_aarch64_main:20261021-abcdef12"
+    )
+
 def test_cuda_builds_select_cuda_test_container_and_aggregate_toolchains():
     matrices = compute_matrices(
         load_repo_config(),
