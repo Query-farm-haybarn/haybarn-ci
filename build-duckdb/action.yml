@@ -54,7 +54,23 @@ runs:
         cache_path="${GITHUB_WORKSPACE}/vcpkg-cache"
         mkdir -p "${cache_path}"
         echo "VCPKG_DEFAULT_BINARY_CACHE=${cache_path}" >> "$GITHUB_ENV"
-        echo "VCPKG_BINARY_SOURCES=clear;files,${cache_path},readwrite" >> "$GITHUB_ENV"
+        # Haybarn: keep the caller's VCPKG_BINARY_SOURCES (e.g. the shared HTTP
+        # cache) instead of replacing it with the job-local folder. Captured once,
+        # so a later step or a second use of this action in the job does not
+        # read the value written below. It may carry a token: no xtrace here.
+        set +x
+        if [[ -z "${BUILD_DUCKDB_CALLER_BINARY_SOURCES+x}" ]]; then
+          BUILD_DUCKDB_CALLER_BINARY_SOURCES="${VCPKG_BINARY_SOURCES:-}"
+          echo "BUILD_DUCKDB_CALLER_BINARY_SOURCES=${BUILD_DUCKDB_CALLER_BINARY_SOURCES}" >> "$GITHUB_ENV"
+        fi
+        if [[ -n "${BUILD_DUCKDB_CALLER_BINARY_SOURCES}" ]]; then
+          echo "Using the caller's VCPKG_BINARY_SOURCES; the actions/cache vcpkg folder is not used"
+          files_cache="false"
+        else
+          echo "VCPKG_BINARY_SOURCES=clear;files,${cache_path},readwrite" >> "$GITHUB_ENV"
+          files_cache="true"
+        fi
+        set -x
         resolved_vcpkg_root="${VCPKG_ROOT:-${GITHUB_WORKSPACE}/vcpkg}"
         vcpkg_last_commit_path="${resolved_vcpkg_root}/vcpkgLastBuiltCommitId"
         do_not_update="false"
@@ -69,11 +85,12 @@ runs:
           echo "vcpkg_commit=${resolved_vcpkg_commit}"
           echo "vcpkg_root=${resolved_vcpkg_root}"
           echo "do_not_update_vcpkg=${do_not_update}"
+          echo "files_cache=${files_cache}"
         } >> "$GITHUB_OUTPUT"
 
 
     - name: Restore vcpkg cache
-      if: ${{ steps.configure.outputs.vcpkg_commit != '' && inputs.cache == 'true' }}
+      if: ${{ steps.configure.outputs.vcpkg_commit != '' && steps.configure.outputs.files_cache == 'true' && inputs.cache == 'true' }}
       id: vcpkg-cache
       uses: actions/cache/restore@v5
       with:
@@ -103,15 +120,21 @@ runs:
       run: |
         # Reset vcpkg env
         echo "::group::After run-vcpkg"
-        env | grep VCPKG
+        # Binary/asset sources may carry a token; print them redacted.
+        env | grep VCPKG | sed -E 's/(Bearer |auth=)[^,;]*/\1<redacted>/g'
         echo "::endgroup::"
 
         # github.workspace is a host path in container jobs.
         cache_path="${GITHUB_WORKSPACE}/vcpkg-cache"
+        if [[ -n "${BUILD_DUCKDB_CALLER_BINARY_SOURCES:-}" ]]; then
+          binary_sources="${BUILD_DUCKDB_CALLER_BINARY_SOURCES}"
+        else
+          binary_sources="clear;files,${cache_path},readwrite"
+        fi
         {
           echo "VCPKG_TOOLCHAIN_PATH=${{ steps.configure.outputs.vcpkg_root }}/scripts/buildsystems/vcpkg.cmake";
           echo "VCPKG_DEFAULT_BINARY_CACHE=${cache_path}";
-          echo "VCPKG_BINARY_SOURCES=clear;files,${cache_path},readwrite";
+          echo "VCPKG_BINARY_SOURCES=${binary_sources}";
           echo USE_MERGED_VCPKG_MANIFEST=1;
         } >> "$GITHUB_ENV"
 
@@ -127,7 +150,7 @@ runs:
       run: ${{ inputs.test }}
 
     - name: Save vcpkg cache
-      if: ${{ steps.configure.outputs.vcpkg_commit != '' && inputs.cache == 'true' && inputs.save-cache == 'true' && steps.vcpkg-cache.outputs.cache-hit != 'true' }}
+      if: ${{ steps.configure.outputs.vcpkg_commit != '' && steps.configure.outputs.files_cache == 'true' && inputs.cache == 'true' && inputs.save-cache == 'true' && steps.vcpkg-cache.outputs.cache-hit != 'true' }}
       uses: actions/cache/save@v5
       with:
         path: ${{ github.workspace }}/vcpkg-cache
